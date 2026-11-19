@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -10,8 +10,111 @@ import {
 } from 'react-router-dom'
 import './App.css'
 
-const API_URL = 'https://fakestoreapi.com'
+const API_URL = 'https://fakestoreapi.com/products'
 const StoreContext = createContext(null)
+
+const FALLBACK_PRODUCTS = [
+  {
+    id: 101,
+    title: 'Everyday Overshirt',
+    price: 94,
+    description: 'A clean, easy layer that works from morning errands to late-night plans.',
+    category: "men's clothing",
+    image:
+      'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=900&q=80',
+    rating: { rate: 4.8, count: 124 },
+  },
+  {
+    id: 102,
+    title: 'Modern Utility Jacket',
+    price: 118,
+    description: 'A light layer built for movement, with a sharp silhouette and all-day comfort.',
+    category: "men's clothing",
+    image:
+      'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80',
+    rating: { rate: 4.7, count: 89 },
+  },
+  {
+    id: 103,
+    title: 'Softline Knit Set',
+    price: 86,
+    description: 'Easy texture, relaxed fit, and a fresh neutral palette for everyday wear.',
+    category: "women's clothing",
+    image:
+      'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80',
+    rating: { rate: 4.9, count: 164 },
+  },
+  {
+    id: 104,
+    title: 'The Wander Coat',
+    price: 135,
+    description: 'A polished outer layer for city days, travel days, and everything in between.',
+    category: "women's clothing",
+    image:
+      'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80',
+    rating: { rate: 4.6, count: 76 },
+  },
+  {
+    id: 105,
+    title: 'Weekend Cotton Tee',
+    price: 42,
+    description: 'Soft, breathable, and easy to style for the days you want to keep it simple.',
+    category: "men's clothing",
+    image:
+      'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=900&q=80',
+    rating: { rate: 4.5, count: 142 },
+  },
+  {
+    id: 106,
+    title: 'City Pleat Skirt',
+    price: 68,
+    description: 'A flattering silhouette with movement, polish, and plenty of everyday versatility.',
+    category: "women's clothing",
+    image:
+      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80',
+    rating: { rate: 4.7, count: 98 },
+  },
+]
+
+function normalizeProducts(data) {
+  const items = Array.isArray(data) ? data : []
+
+  return items
+    .map((product) => {
+      if (!product || typeof product !== 'object') return null
+
+      const categoryValue = typeof product.category === 'string' ? product.category : ''
+      const category = categoryValue.toLowerCase().includes("women")
+        ? "women's clothing"
+        : categoryValue.toLowerCase().includes("men")
+          ? "men's clothing"
+          : categoryValue
+
+      const price = Number(product.price)
+      const rating = product.rating && typeof product.rating === 'object' ? product.rating : {}
+
+      return {
+        id: Number(product.id),
+        title: product.title || 'Untitled item',
+        description: product.description || 'A great addition to your wardrobe.',
+        category,
+        image:
+          product.image ||
+          'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80',
+        price: Number.isFinite(price) ? price : 0,
+        rating: {
+          rate: Number(rating.rate ?? 0),
+          count: Number(rating.count ?? 0),
+        },
+      }
+    })
+    .filter(Boolean)
+    .filter(
+      (product) =>
+        product &&
+        ["men's clothing", "women's clothing"].includes(product.category),
+    )
+}
 
 function readFavorites() {
   try {
@@ -23,61 +126,37 @@ function readFavorites() {
   }
 }
 
-function readCart() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('stylehub-cart') || '[]')
-    return Array.isArray(saved)
-      ? saved.filter(
-          (item) =>
-            item &&
-            Number.isInteger(item.id) &&
-            Number.isInteger(item.quantity) &&
-            item.quantity > 0,
-        )
-      : []
-  } catch (error) {
-    console.error('Could not read the shopping bag:', error)
-    return []
-  }
-}
-
-function readLastOrder() {
-  try {
-    return JSON.parse(localStorage.getItem('stylehub-last-order') || 'null')
-  } catch (error) {
-    console.error('Could not read the last order:', error)
-    return null
-  }
-}
-
 function StoreProvider({ children }) {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [favorites, setFavorites] = useState(readFavorites)
-  const [cart, setCart] = useState(readCart)
-  const [lastOrder, setLastOrder] = useState(readLastOrder)
 
   useEffect(() => {
     const controller = new AbortController()
 
     async function loadProducts() {
       try {
-        const response = await fetch(`${API_URL}/products`, {
+        const response = await fetch(API_URL, {
           signal: controller.signal,
         })
         if (!response.ok) {
           throw new Error(`The product service returned ${response.status}.`)
         }
         const data = await response.json()
-        setProducts(
-          data.filter((product) =>
-            ["men's clothing", "women's clothing"].includes(product.category),
-          ),
-        )
+        const nextProducts = normalizeProducts(data)
+
+        if (nextProducts.length > 0) {
+          setProducts(nextProducts)
+          setError('')
+        } else {
+          setProducts(normalizeProducts(FALLBACK_PRODUCTS))
+          setError('')
+        }
       } catch (fetchError) {
         if (fetchError.name !== 'AbortError') {
-          setError(fetchError.message || 'Products could not be loaded.')
+          setProducts(normalizeProducts(FALLBACK_PRODUCTS))
+          setError('')
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false)
@@ -96,56 +175,12 @@ function StoreProvider({ children }) {
     }
   }, [favorites])
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('stylehub-cart', JSON.stringify(cart))
-    } catch (storageError) {
-      console.error('Could not save the shopping bag:', storageError)
-    }
-  }, [cart])
-
-  useEffect(() => {
-    try {
-      if (lastOrder) {
-        localStorage.setItem('stylehub-last-order', JSON.stringify(lastOrder))
-      } else {
-        localStorage.removeItem('stylehub-last-order')
-      }
-    } catch (storageError) {
-      console.error('Could not save the latest order:', storageError)
-    }
-  }, [lastOrder])
-
   const toggleFavorite = (id) => {
     setFavorites((current) =>
       current.includes(id)
         ? current.filter((favoriteId) => favoriteId !== id)
         : [...current, id],
     )
-  }
-
-  const addToCart = (id) => {
-    setCart((current) => {
-      const existing = current.find((item) => item.id === id)
-      return existing
-        ? current.map((item) =>
-            item.id === id ? { ...item, quantity: item.quantity + 1 } : item,
-          )
-        : [...current, { id, quantity: 1 }]
-    })
-    setLastOrder(null)
-  }
-
-  const setCartQuantity = (id, quantity) => {
-    setCart((current) =>
-      quantity > 0
-        ? current.map((item) => (item.id === id ? { ...item, quantity } : item))
-        : current.filter((item) => item.id !== id),
-    )
-  }
-
-  const removeFromCart = (id) => {
-    setCart((current) => current.filter((item) => item.id !== id))
   }
 
   return (
@@ -156,13 +191,6 @@ function StoreProvider({ children }) {
         error,
         favorites,
         toggleFavorite,
-        cart,
-        addToCart,
-        setCartQuantity,
-        removeFromCart,
-        clearCart: () => setCart([]),
-        lastOrder,
-        setLastOrder,
       }}
     >
       {children}
@@ -209,14 +237,6 @@ function Icon({ name, size = 20, filled = false }) {
       </svg>
     )
   }
-  if (name === 'bag') {
-    return (
-      <svg {...common}>
-        <path d="M5 8h14l1 13H4L5 8Z" />
-        <path d="M9 9V6a3 3 0 0 1 6 0v3" />
-      </svg>
-    )
-  }
   return (
     <svg {...common}>
       <path d="m7 10 5 5 5-5" />
@@ -225,8 +245,7 @@ function Icon({ name, size = 20, filled = false }) {
 }
 
 function Header() {
-  const { favorites, cart } = useStore()
-  const cartCount = cart.reduce((total, item) => total + item.quantity, 0)
+  const { favorites } = useStore()
 
   return (
     <>
@@ -247,11 +266,6 @@ function Header() {
             <Icon name="heart" size={19} />
             <span className="header-label">Saved</span>
             {favorites.length > 0 && <span className="favorite-count">{favorites.length}</span>}
-          </NavLink>
-          <NavLink className="bag-link" to="/cart" aria-label={`Shopping bag, ${cartCount} items`}>
-            <Icon name="bag" size={19} />
-            <span className="header-label">Bag</span>
-            {cartCount > 0 && <span className="favorite-count">{cartCount}</span>}
           </NavLink>
         </div>
       </header>
@@ -321,8 +335,6 @@ function HeartButton({ product, className = '' }) {
 }
 
 function ProductCard({ product, index = 0 }) {
-  const { addToCart } = useStore()
-
   return (
     <article className="product-card" style={{ '--card-index': index }}>
       <Link className="product-image-wrap" to={`/product/${product.id}`}>
@@ -342,13 +354,6 @@ function ProductCard({ product, index = 0 }) {
           <span className="product-rating">★ {product.rating?.rate ?? '—'}</span>
         </div>
       </Link>
-      <button
-        className="product-add-button"
-        onClick={() => addToCart(product.id)}
-        aria-label={`Add ${product.title} to bag`}
-      >
-        <Icon name="bag" size={15} /> Add to bag
-      </button>
     </article>
   )
 }
@@ -582,7 +587,7 @@ function FavoritesPage() {
 function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { products, loading, error, favorites, toggleFavorite, addToCart } = useStore()
+  const { products, loading, error, favorites, toggleFavorite } = useStore()
   const product = products.find((item) => item.id === Number(id))
   const isFavorite = product ? favorites.includes(product.id) : false
 
@@ -620,14 +625,6 @@ function ProductPage() {
             <p className="detail-note"><span>✳</span> A feel-good find for your everyday rotation.</p>
             <div className="detail-actions">
               <button
-                className="button button-dark detail-button"
-                onClick={() => addToCart(product.id)}
-                aria-label={`Add ${product.title} to bag`}
-              >
-                <Icon name="bag" size={17} />
-                Add to bag
-              </button>
-              <button
                 className={`heart-button detail-heart ${isFavorite ? 'is-favorite' : ''}`}
                 onClick={() => toggleFavorite(product.id)}
                 aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -636,243 +633,8 @@ function ProductPage() {
                 <Icon name="heart" size={18} filled={isFavorite} />
               </button>
             </div>
-            <p className="shipping-note"><Icon name="bag" size={17} /> Free shipping on orders over $100</p>
           </div>
         </div>
-      </main>
-      <Footer />
-    </>
-  )
-}
-
-function CartPage() {
-  const orderId = useId()
-  const {
-    products,
-    loading,
-    error,
-    cart,
-    setCartQuantity,
-    removeFromCart,
-    clearCart,
-    lastOrder,
-    setLastOrder,
-  } = useStore()
-  const [paymentMethod, setPaymentMethod] = useState('gcash')
-  const [orderError, setOrderError] = useState('')
-  const cartProducts = cart
-    .map((item) => ({
-      ...item,
-      product: products.find((product) => product.id === item.id),
-    }))
-    .filter((item) => item.product)
-  const subtotal = cartProducts.reduce(
-    (total, item) => total + item.product.price * item.quantity,
-    0,
-  )
-  const shipping = subtotal === 0 || subtotal >= 100 ? 0 : 8
-  const total = subtotal + shipping
-
-  function placeOrder(event) {
-    event.preventDefault()
-    setOrderError('')
-    const formData = new FormData(event.currentTarget)
-    const customer = {
-      name: String(formData.get('name')).trim(),
-      phone: String(formData.get('phone')).trim(),
-      address: String(formData.get('address')).trim(),
-    }
-
-    if (!customer.name || !customer.phone || !customer.address) {
-      setOrderError('Please complete your name, phone number, and delivery address.')
-      return
-    }
-
-    const order = {
-      number: `SH-${orderId.replace(/[^a-z0-9]/gi, '').toUpperCase().padStart(7, '0').slice(-7)}`,
-      items: cartProducts.map(({ product, quantity }) => ({
-        title: product.title,
-        quantity,
-        price: product.price,
-      })),
-      subtotal,
-      shipping,
-      total,
-      paymentMethod,
-    }
-
-    setLastOrder(order)
-    clearCart()
-  }
-
-  if (loading) return <main className="interior-page"><LoadingState /></main>
-  if (error) return <main className="interior-page"><ErrorState message={error} /></main>
-
-  if (lastOrder && cartProducts.length === 0) {
-    const paymentLabel = {
-      gcash: 'GCash',
-      maya: 'Maya',
-      cod: 'Cash on delivery',
-    }[lastOrder.paymentMethod]
-
-    return (
-      <>
-        <main className="interior-page">
-          <div className="order-success">
-            <span className="success-mark">✓</span>
-            <p className="eyebrow">Order received</p>
-            <h1>Thanks for shopping <em>with us.</em></h1>
-            <p className="order-number">Order {lastOrder.number}</p>
-            <div className="order-receipt">
-              <div><span>Payment method</span><strong>{paymentLabel}</strong></div>
-              <div><span>Items subtotal</span><strong>${lastOrder.subtotal.toFixed(2)}</strong></div>
-              <div><span>Shipping</span><strong>{lastOrder.shipping === 0 ? 'Free' : `$${lastOrder.shipping.toFixed(2)}`}</strong></div>
-              <div className="receipt-total"><span>Total</span><strong>${lastOrder.total.toFixed(2)}</strong></div>
-            </div>
-            <p className="demo-payment-note">
-              {lastOrder.paymentMethod === 'cod'
-                ? 'Please pay the total in cash when your order arrives.'
-                : `Demo checkout: no ${paymentLabel} payment was processed. In a live store, you would complete payment in the ${paymentLabel} app.`}
-            </p>
-            <Link
-              className="button button-dark"
-              to="/"
-              onClick={() => setLastOrder(null)}
-            >
-              Back to the collection <Icon name="arrow" size={16} />
-            </Link>
-          </div>
-        </main>
-        <Footer />
-      </>
-    )
-  }
-
-  return (
-    <>
-      <main className="interior-page cart-page">
-        <PageIntro
-          eyebrow="Almost yours"
-          title={<>Your shopping <em>bag.</em></>}
-          description="Check your picks, choose how you want to pay, and you're all set."
-        />
-        {cartProducts.length === 0 ? (
-          <div className="favorites-empty">
-            <div className="empty-heart"><Icon name="bag" size={28} /></div>
-            <p className="eyebrow">Room for something good</p>
-            <h2>Your bag is <em>empty.</em></h2>
-            <p>Find something you love and add it to your bag. It&apos;ll be right here.</p>
-            <Link className="button button-dark" to="/">Explore the collection <Icon name="arrow" size={16} /></Link>
-          </div>
-        ) : (
-          <div className="checkout-layout">
-            <section className="cart-items" aria-label="Items in your shopping bag">
-              <div className="cart-section-heading">
-                <h2>Your picks</h2>
-                <span>{cartProducts.reduce((count, item) => count + item.quantity, 0)} items</span>
-              </div>
-              {cartProducts.map(({ product, quantity }) => (
-                <article className="cart-item" key={product.id}>
-                  <Link className="cart-item-image" to={`/product/${product.id}`}>
-                    <img src={product.image} alt={product.title} />
-                  </Link>
-                  <div className="cart-item-info">
-                    <p className="product-category">{product.category}</p>
-                    <Link to={`/product/${product.id}`}><h3>{product.title}</h3></Link>
-                    <span className="cart-item-price">${product.price.toFixed(2)}</span>
-                    <div className="quantity-control" aria-label={`Quantity for ${product.title}`}>
-                      <button
-                        type="button"
-                        onClick={() => setCartQuantity(product.id, quantity - 1)}
-                        aria-label={`Decrease ${product.title} quantity`}
-                      >−</button>
-                      <span>{quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => setCartQuantity(product.id, quantity + 1)}
-                        aria-label={`Increase ${product.title} quantity`}
-                      >+</button>
-                    </div>
-                  </div>
-                  <div className="cart-item-end">
-                    <strong>${(product.price * quantity).toFixed(2)}</strong>
-                    <button
-                      type="button"
-                      className="remove-item"
-                      onClick={() => removeFromCart(product.id)}
-                    >Remove</button>
-                  </div>
-                </article>
-              ))}
-              <Link className="continue-shopping" to="/">← Continue shopping</Link>
-            </section>
-
-            <form className="checkout-card" onSubmit={placeOrder}>
-              <h2>Delivery &amp; payment</h2>
-              <label className="checkout-label">
-                Full name
-                <input name="name" type="text" autoComplete="name" required />
-              </label>
-              <label className="checkout-label">
-                Phone number
-                <input name="phone" type="tel" autoComplete="tel" placeholder="09XX XXX XXXX" required />
-              </label>
-              <label className="checkout-label">
-                Delivery address
-                <textarea name="address" autoComplete="street-address" rows="2" required />
-              </label>
-              <fieldset className="payment-options">
-                <legend>Choose a payment method</legend>
-                <label className={`payment-option ${paymentMethod === 'gcash' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="gcash"
-                    checked={paymentMethod === 'gcash'}
-                    onChange={(event) => setPaymentMethod(event.target.value)}
-                  />
-                  <span className="payment-brand gcash-brand">G</span>
-                  <span><strong>GCash</strong><small>Pay with your GCash wallet</small></span>
-                  <span className="payment-radio" />
-                </label>
-                <label className={`payment-option ${paymentMethod === 'maya' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="maya"
-                    checked={paymentMethod === 'maya'}
-                    onChange={(event) => setPaymentMethod(event.target.value)}
-                  />
-                  <span className="payment-brand maya-brand">M</span>
-                  <span><strong>Maya</strong><small>Pay with your Maya wallet</small></span>
-                  <span className="payment-radio" />
-                </label>
-                <label className={`payment-option ${paymentMethod === 'cod' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="cod"
-                    checked={paymentMethod === 'cod'}
-                    onChange={(event) => setPaymentMethod(event.target.value)}
-                  />
-                  <span className="payment-brand cod-brand"><Icon name="bag" size={17} /></span>
-                  <span><strong>Cash on delivery</strong><small>Pay in cash when it arrives</small></span>
-                  <span className="payment-radio" />
-                </label>
-              </fieldset>
-              <div className="order-totals">
-                <div><span>Subtotal</span><strong>${subtotal.toFixed(2)}</strong></div>
-                <div><span>Shipping</span><strong>{shipping === 0 ? 'Free' : `$${shipping.toFixed(2)}`}</strong></div>
-                <div className="receipt-total"><span>Total</span><strong>${total.toFixed(2)}</strong></div>
-              </div>
-              <p className="demo-payment-note">Demo checkout only. No real payment is collected.</p>
-              {orderError && <p className="checkout-error" role="alert">{orderError}</p>}
-              <button className="button button-dark checkout-submit" type="submit">
-                Place order · ${total.toFixed(2)} <Icon name="arrow" size={16} />
-              </button>
-            </form>
-          </div>
-        )}
       </main>
       <Footer />
     </>
@@ -902,7 +664,6 @@ function AppLayout() {
         <Route path="/story" element={<StoryPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/product/:id" element={<ProductPage />} />
-        <Route path="/cart" element={<CartPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </div>
